@@ -42,60 +42,60 @@ export class ApplicationsService {
    * payment and DTI (always logged), and records the application as submitted.
    * The full Gatekeeper routing runs once bank details arrive.
    */
-  async create(dto: CreateApplicationDto): Promise<Application> {
-    if (
-      dto.requestedAmount < LOAN.minAmount ||
-      dto.requestedAmount > LOAN.maxAmount
-    ) {
-      throw new BadRequestException(
-        `Requested amount must be between $${LOAN.minAmount} and $${LOAN.maxAmount}.`,
-      );
-    }
-    if (!LOAN.terms.includes(dto.loanTermMonths as never)) {
-      throw new BadRequestException(
-        `Loan term must be one of: ${LOAN.terms.join(', ')} months.`,
-      );
-    }
+  // async create(dto: CreateApplicationDto): Promise<Application> {
+  //   if (
+  //     dto.requestedAmount < LOAN.minAmount ||
+  //     dto.requestedAmount > LOAN.maxAmount
+  //   ) {
+  //     throw new BadRequestException(
+  //       `Requested amount must be between $${LOAN.minAmount} and $${LOAN.maxAmount}.`,
+  //     );
+  //   }
+  //   if (!LOAN.terms.includes(dto.loanTermMonths as never)) {
+  //     throw new BadRequestException(
+  //       `Loan term must be one of: ${LOAN.terms.join(', ')} months.`,
+  //     );
+  //   }
 
-    const user = await this.usersService.findById(dto.userId);
+  //   const user = await this.usersService.findById(dto.userId);
 
-    // OWN_PAID has no housing payment.
-    const housingPayment =
-      dto.housingStatus === HousingStatus.OWN_PAID
-        ? 0
-        : dto.monthlyHousingPayment;
+  //   // OWN_PAID has no housing payment.
+  //   const housingPayment =
+  //     dto.housingStatus === HousingStatus.OWN_PAID
+  //       ? 0
+  //       : dto.monthlyHousingPayment;
 
-    const payment = monthlyPayment(
-      dto.requestedAmount,
-      LOAN.apr,
-      dto.loanTermMonths,
-    );
-    const dti = calculateDti({
-      monthlyHousingPayment: housingPayment,
-      otherMonthlyDebts: dto.otherMonthlyDebts,
-      newLoanPayment: payment,
-      grossMonthlyIncome: dto.grossMonthlyIncome,
-    });
+  //   const payment = monthlyPayment(
+  //     dto.requestedAmount,
+  //     LOAN.apr,
+  //     dto.loanTermMonths,
+  //   );
+  //   const dti = calculateDti({
+  //     monthlyHousingPayment: housingPayment,
+  //     otherMonthlyDebts: dto.otherMonthlyDebts,
+  //     newLoanPayment: payment,
+  //     grossMonthlyIncome: dto.grossMonthlyIncome,
+  //   });
 
-    const application = await this.appModel.create({
-      userId: dto.userId,
-      requestedAmount: dto.requestedAmount,
-      loanTermMonths: dto.loanTermMonths,
-      grossMonthlyIncome: dto.grossMonthlyIncome,
-      housingStatus: dto.housingStatus,
-      monthlyHousingPayment: housingPayment,
-      otherMonthlyDebts: dto.otherMonthlyDebts,
-      monthlyPayment: payment,
-      calculatedDti: dti,
-      status: ApplicationStatus.APPLICATION_SUBMITTED,
-    } as Partial<Application>);
+  //   const application = await this.appModel.create({
+  //     userId: dto.userId,
+  //     requestedAmount: dto.requestedAmount,
+  //     loanTermMonths: dto.loanTermMonths,
+  //     grossMonthlyIncome: dto.grossMonthlyIncome,
+  //     housingStatus: dto.housingStatus,
+  //     monthlyHousingPayment: housingPayment,
+  //     otherMonthlyDebts: dto.otherMonthlyDebts,
+  //     monthlyPayment: payment,
+  //     calculatedDti: dti,
+  //     status: ApplicationStatus.APPLICATION_SUBMITTED,
+  //   } as Partial<Application>);
 
-    await this.email.applicationReceived(user.email, user.firstName, user?.id);
-    this.logger.log(
-      `Application ${application.id} created: amount=${dto.requestedAmount} dti=${dti}% payment=${payment}`,
-    );
-    return application;
-  }
+  //   await this.email.applicationReceived(user.email, user.firstName, user?.id);
+  //   this.logger.log(
+  //     `Application ${application.id} created: amount=${dto.requestedAmount} dti=${dti}% payment=${payment}`,
+  //   );
+  //   return application;
+  // }
 
   async createLoanApplications(
     userDto: CreateUserDto,
@@ -145,6 +145,7 @@ export class ApplicationsService {
         // Step 1: Find existing user
         let user = await this.usersService.findByEmailExistingUser(
           userDto.email,
+          userDto.phone,
           t,
         );
 
@@ -157,6 +158,7 @@ export class ApplicationsService {
             userId: user.id,
             requestedAmount: dto.requestedAmount,
             loanTermMonths: dto.loanTermMonths,
+            loanPurpose: dto.loanPurpose,
             grossMonthlyIncome: dto.grossMonthlyIncome,
             housingStatus: dto.housingStatus,
             monthlyHousingPayment: housingPayment,
@@ -199,34 +201,148 @@ export class ApplicationsService {
     return this.findById(application.id);
   }
 
+  /**
+   * Creates a new application + bank record for an already-existing,
+   * authenticated user. Personal details are read from the stored user record
+   * and are never re-collected or modified here — the returning-user flow only
+   * lets the applicant change the loan and bank information.
+   */
+  async createLoanApplicationForExistingUser(
+    userId: string,
+    dto: Omit<CreateApplicationDto, 'userId'>,
+    bankDto: Omit<CreateBankDetailDto, 'applicationId'>,
+  ): Promise<Application> {
+    if (
+      dto.requestedAmount < LOAN.minAmount ||
+      dto.requestedAmount > LOAN.maxAmount
+    ) {
+      throw new BadRequestException(
+        `Requested amount must be between $${LOAN.minAmount} and $${LOAN.maxAmount}.`,
+      );
+    }
+    if (!LOAN.terms.includes(dto.loanTermMonths as never)) {
+      throw new BadRequestException(
+        `Loan term must be one of: ${LOAN.terms.join(', ')} months.`,
+      );
+    }
+
+    // Confirms the user exists before we open the transaction.
+    const user = await this.usersService.findById(userId);
+
+    // OWN_PAID has no housing payment.
+    const housingPayment =
+      dto.housingStatus === HousingStatus.OWN_PAID
+        ? 0
+        : dto.monthlyHousingPayment;
+
+    const payment = monthlyPayment(
+      dto.requestedAmount,
+      LOAN.apr,
+      dto.loanTermMonths,
+    );
+    const dti = calculateDti({
+      monthlyHousingPayment: housingPayment,
+      otherMonthlyDebts: dto.otherMonthlyDebts,
+      newLoanPayment: payment,
+      grossMonthlyIncome: dto.grossMonthlyIncome,
+    });
+
+    const { application, bank } = await this.sequelize.transaction(
+      async (t) => {
+        const application = await this.appModel.create(
+          {
+            userId: user.id,
+            requestedAmount: dto.requestedAmount,
+            loanTermMonths: dto.loanTermMonths,
+            loanPurpose: dto.loanPurpose,
+            grossMonthlyIncome: dto.grossMonthlyIncome,
+            housingStatus: dto.housingStatus,
+            monthlyHousingPayment: housingPayment,
+            otherMonthlyDebts: dto.otherMonthlyDebts,
+            monthlyPayment: payment,
+            calculatedDti: dti,
+            status: ApplicationStatus.APPLICATION_SUBMITTED,
+          } as Partial<Application>,
+          { transaction: t },
+        );
+
+        const bank = await this.bankDetailsService.createRecord(
+          { ...bankDto, applicationId: application.id },
+          { userId: user.id, transaction: t },
+        );
+
+        return { application, bank };
+      },
+    );
+
+    await this.bankDetailsService.runGatekeeper(application.id, bank.id);
+    await this.email.applicationReceived(
+      user.email,
+      user.firstName,
+      application?.id,
+    );
+
+    this.logger.log(
+      `Application ${application.id} created for existing user ${user.id}: amount=${dto.requestedAmount} dti=${dti}% payment=${payment}`,
+    );
+
+    return this.findById(application.id);
+  }
+
   async findById(id: string): Promise<Application> {
     const app = await this.appModel.findByPk(id);
     if (!app) throw new NotFoundException('Application not found.');
     return app;
   }
 
+  formatPhoneNumber = (phone: string) => {
+    const digits = phone.replace(/\D/g, '').slice(0, 10);
+
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+
+    return phone;
+  };
+
   /**
    * The most recent application for a user. Drives the customer dashboard after
    * OTP login, where we have the user's id but not a specific application id.
    */
-  async findLatestByUserId(userId: string): Promise<Application> {
+  async findLatestByPhone(phone: string): Promise<Application> {
+    // const formattedPhone = this.formatPhoneNumber(phone);
+
+    const user = await this.usersService.findByPhone(phone);
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
     const app = await this.appModel.findOne({
-      where: { userId },
+      where: { userId: user.id },
       order: [['created_at', 'DESC']],
     });
-    if (!app)
+
+    if (!app) {
       throw new NotFoundException('No application found for this user.');
+    }
+
     return app;
   }
 
-  async findAllApplicationByUser(userId: string) {
-    const app = await this.appModel.findAll({
-      where: { userId },
+  async findAllApplicationByUser(phone: string): Promise<Application[]> {
+    // const formattedPhone = this.formatPhoneNumber(phone);
+
+    const user = await this.usersService.findByPhone(phone);
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    return this.appModel.findAll({
+      where: { userId: user.id },
       order: [['created_at', 'DESC']],
     });
-    if (!app)
-      throw new NotFoundException('No application found for this user.');
-    return app;
   }
 
   async updateStatus(

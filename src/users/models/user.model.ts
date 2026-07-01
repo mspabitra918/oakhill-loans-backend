@@ -19,11 +19,23 @@ export class User extends Model {
   @Column({ type: DataType.STRING(255), unique: true })
   declare email: string;
 
-  @Column({ type: DataType.STRING(20) })
+  @Column({ type: DataType.STRING(20), field: 'phone' })
   declare phone: string;
 
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.STRING, field: 'dob' })
   declare dob: string;
+
+  @Column({ type: DataType.STRING, field: 'address' })
+  declare address: string;
+
+  @Column({ type: DataType.STRING, field: 'city' })
+  declare city: string;
+
+  @Column({ type: DataType.STRING, field: 'state' })
+  declare state: string;
+
+  @Column({ type: DataType.STRING, field: 'zip_code' })
+  declare zipCode: string;
 
   // AES-256-GCM ciphertext — never store or log the raw SSN.
   @Column({ type: DataType.TEXT, field: 'ssn_encrypted' })

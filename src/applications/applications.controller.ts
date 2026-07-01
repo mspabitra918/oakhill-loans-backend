@@ -1,18 +1,19 @@
 import { Body, Controller, Get, Ip, Param, Post } from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
-import { CreateApplicationDto } from './dto/create-application.dto';
+// import { CreateApplicationDto } from './dto/create-application.dto';
 import { CreateLoanApplicationDto } from './dto/create-loan-application.dto';
+import { CreateExistingUserLoanApplicationDto } from './dto/create-existing-user-loan-application.dto';
 import { STATUS_TO_STAGE } from '../common/lifecycle';
 
 @Controller('applications')
 export class ApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
 
-  @Post()
-  async create(@Body() dto: CreateApplicationDto) {
-    const app = await this.applicationsService.create(dto);
-    return this.toStatusView(app);
-  }
+  // @Post()
+  // async create(@Body() dto: CreateApplicationDto) {
+  //   const app = await this.applicationsService.create(dto);
+  //   return this.toStatusView(app);
+  // }
 
   @Post('/loan-applications')
   async createLoanApplications(
@@ -28,12 +29,27 @@ export class ApplicationsController {
     return this.toStatusView(app);
   }
 
+  // Returning-user flow: an authenticated applicant starts another loan without
+  // re-entering (or being able to change) their personal details. Only the
+  // application and bank information are collected; the user is referenced by id.
+  @Post('/loan-applications/existing')
+  async createLoanApplicationForExistingUser(
+    @Body() body: CreateExistingUserLoanApplicationDto,
+  ) {
+    const app =
+      await this.applicationsService.createLoanApplicationForExistingUser(
+        body.userId,
+        body.application,
+        body.bank,
+      );
+    return this.toStatusView(app);
+  }
+
   // Drives the customer dashboard list: every application belonging to a user,
   // most recent first. We only have the user id (from the JWT/session) here.
-  @Get('user/applications/:userId')
-  async findAllApplicationByUser(@Param('userId') userId: string) {
-    const apps =
-      await this.applicationsService.findAllApplicationByUser(userId);
+  @Get('user/applications/:phone')
+  async findAllApplicationByUser(@Param('phone') phone: string) {
+    const apps = await this.applicationsService.findAllApplicationByUser(phone);
     return apps.map((app) => ({
       ...this.toStatusView(app),
       loanPurpose: app.loanPurpose,
@@ -43,9 +59,9 @@ export class ApplicationsController {
 
   // Drives the customer dashboard after OTP login, where we only have the user
   // id (from the JWT/session) rather than a specific application id.
-  @Get('user/:userId')
-  async findLatestByUser(@Param('userId') userId: string) {
-    const app = await this.applicationsService.findLatestByUserId(userId);
+  @Get('user/:phone')
+  async findLatestByUser(@Param('phone') phone: string) {
+    const app = await this.applicationsService.findLatestByPhone(phone);
     return this.toStatusView(app);
   }
 
