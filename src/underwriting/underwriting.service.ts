@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Disbursement } from './models/disbursement.model';
 import { AuditLog } from './models/audit-log.model';
@@ -10,6 +15,7 @@ import { EmailService } from '../notifications/email.service';
 import { SmsService } from '../notifications/sms.service';
 import { ApplicationStatus, RELEASABLE_STATUSES } from '../common/constants';
 import { ReleaseFundsDto } from './dto/underwriting.dto';
+import { AgreementService } from 'src/applications/agreement.service';
 
 // Statuses surfaced as underwriter work queues.
 const QUEUE_STATUSES = [
@@ -37,6 +43,7 @@ export class UnderwritingService {
     private readonly encryption: EncryptionService,
     private readonly email: EmailService,
     private readonly sms: SmsService,
+    private readonly agreementService: AgreementService,
   ) {}
 
   private async audit(
@@ -71,6 +78,73 @@ export class UnderwritingService {
   }
 
   /**
+   * Flat, searchable application list for the admin table. Unlike getQueues()
+   * (grouped by status), this returns one flat array enriched with applicant
+   * name / email / phone so the table can display and the caller can search
+   * across them. Defaults to the standard work-queue statuses when no explicit
+   * status is given.
+   */
+  async searchApplications(params: {
+    q?: string;
+    status?: string;
+    date?: string;
+  }) {
+    let dateFrom: Date | undefined;
+    let dateTo: Date | undefined;
+    if (params.date) {
+      const from = new Date(`${params.date}T00:00:00.000`);
+      const to = new Date(`${params.date}T23:59:59.999`);
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        dateFrom = from;
+        dateTo = to;
+      }
+    }
+
+    const statuses =
+      params.status &&
+      QUEUE_STATUSES.includes(params.status as ApplicationStatus)
+        ? [params.status]
+        : (QUEUE_STATUSES as unknown as string[]);
+
+    const apps = await this.applications.searchAdmin({
+      q: params.q,
+      statuses,
+      dateFrom,
+      dateTo,
+    });
+
+    return apps.map((a) => ({
+      id: a.id,
+      status: a.status,
+      requestedAmount: Number(a.requestedAmount),
+      calculatedDti: Number(a.calculatedDti),
+      statusReason: a.statusReason ?? null,
+      createdAt: a.createdAt,
+      firstName: a.user?.firstName ?? '',
+      lastName: a.user?.lastName ?? '',
+      email: a.user?.email ?? '',
+      phone: a.user?.phone ? this.formatPhoneNumber(a.user.phone) : '',
+    }));
+  }
+
+  formatPhoneNumber = (phone: string) => {
+    let digits = phone.replace(/\D/g, '');
+
+    // Remove leading country code (1) if present
+    if (digits.startsWith('1') && digits.length === 11) {
+      digits = digits.slice(1);
+    }
+
+    digits = digits.slice(0, 10);
+
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+
+    return phone;
+  };
+
+  /**
    * Dual-view: self-reported data alongside API-verified signals. Account
    * numbers are decrypted only to render a masked tail (••••6789).
    */
@@ -93,7 +167,17 @@ export class UnderwritingService {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        phone: user.phone,
+        phone: this.formatPhoneNumber(user.phone),
+        address: user.address,
+        city: user.city,
+        state: user.state,
+        zipCode: user.zipCode,
+        dob: user.dob,
+        ssn: this.safeMask(user.ssnEncrypted),
+        requestedAmount: Number(app.requestedAmount),
+        loanTermMonths: app.loanTermMonths,
+        monthlyPayment: Number(app.monthlyPayment),
+        calculatedDti: Number(app.calculatedDti),
         grossMonthlyIncome: Number(app.grossMonthlyIncome),
         housingStatus: app.housingStatus,
         monthlyHousingPayment: Number(app.monthlyHousingPayment),
@@ -131,6 +215,15 @@ export class UnderwritingService {
     actor: string,
     reason?: string,
   ) {
+    const application = await this.applications.findById(applicationId);
+    if (!application) {
+      throw new NotFoundException('Loan application not found');
+    }
+
+    // Note: the loan agreement PDF is generated on demand when the borrower
+    // opens it from the status portal (ApplicationsService.getAgreement), so no
+    // pre-generation is needed here when advancing to SIGN_LOAN_AGREEMENT.
+
     const app = await this.applications.updateStatus(
       applicationId,
       status,
@@ -139,6 +232,7 @@ export class UnderwritingService {
     await this.audit(actor, 'advance', applicationId, { status, reason });
 
     const user = await this.users.findById(app.userId);
+
     // Notify the applicant of their new stage. sendStatusUpdateEmail is a no-op
     // for internal queue statuses (PENDING_VERIFICATION, MANUAL_REVIEW, …) that
     // have no customer-facing template, so this is safe for every status.

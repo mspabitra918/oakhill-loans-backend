@@ -8,7 +8,9 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/sequelize';
 import { Sequelize } from 'sequelize-typescript';
+import { Op, cast, col, where as whereFn, WhereOptions } from 'sequelize';
 import { createHash } from 'crypto';
+import { User } from '../users/models/user.model';
 import { Application } from './models/application.model';
 import { LoanAgreement } from './models/loan-agreement.model';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -20,6 +22,8 @@ import { CreateBankDetailDto } from 'src/bank-details/dto/create-bank-detail.dto
 import { CreateUserDto } from 'src/users/dto/create-user.dto';
 import { BankDetailsService } from '../bank-details/bank-details.service';
 import { TrackingService } from 'src/tracking/tracking.service';
+import { AgreementService } from './agreement.service';
+import { UploadService } from 'src/upload/upload.service';
 
 @Injectable()
 export class ApplicationsService {
@@ -35,6 +39,8 @@ export class ApplicationsService {
     private readonly email: EmailService,
     @InjectConnection() private readonly sequelize: Sequelize,
     private readonly trackingService: TrackingService,
+    private readonly agreementService: AgreementService,
+    private readonly uploadService: UploadService,
   ) {}
 
   /**
@@ -295,16 +301,6 @@ export class ApplicationsService {
     return app;
   }
 
-  formatPhoneNumber = (phone: string) => {
-    const digits = phone.replace(/\D/g, '').slice(0, 10);
-
-    if (digits.length === 10) {
-      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-    }
-
-    return phone;
-  };
-
   /**
    * The most recent application for a user. Drives the customer dashboard after
    * OTP login, where we have the user's id but not a specific application id.
@@ -320,6 +316,7 @@ export class ApplicationsService {
 
     const app = await this.appModel.findOne({
       where: { userId: user.id },
+      include: [User],
       order: [['created_at', 'DESC']],
     });
 
@@ -341,6 +338,7 @@ export class ApplicationsService {
 
     return this.appModel.findAll({
       where: { userId: user.id },
+      include: [User],
       order: [['created_at', 'DESC']],
     });
   }
@@ -369,27 +367,179 @@ export class ApplicationsService {
   }
 
   /**
-   * Records an e-signature for the loan agreement and advances the lifecycle to
-   * the verification-deposit step.
+   * Admin queue search. Joins the applicant so a single free-text term can match
+   * the application id or the user's first/last name, email, or phone. Phone is
+   * matched on digits only (formatting and a leading US country code are
+   * stripped) so "(222) 333-3333", "2223333333", and "+12223333333" all hit the
+   * same E.164 record. Optionally narrows by status set and a created-at day.
    */
-  async esign(id: string, ip: string): Promise<Application> {
-    const app = await this.findById(id);
+  async searchAdmin(opts: {
+    q?: string;
+    statuses?: string[];
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<Application[]> {
+    const where: WhereOptions = {};
+
+    if (opts.statuses?.length) {
+      (where as Record<symbol | string, unknown>).status = {
+        [Op.in]: opts.statuses,
+      };
+    }
+
+    if (opts.dateFrom && opts.dateTo) {
+      (where as Record<symbol | string, unknown>).createdAt = {
+        [Op.between]: [opts.dateFrom, opts.dateTo],
+      };
+    }
+
+    const term = opts.q?.trim();
+    if (term) {
+      const like = `%${term}%`;
+      const digits = term.replace(/\D/g, '');
+      const phoneDigits =
+        digits.length === 11 && digits.startsWith('1')
+          ? digits.slice(1)
+          : digits;
+
+      const or: unknown[] = [
+        // id is a UUID column — cast to text so ILIKE applies.
+        whereFn(cast(col('Application.id'), 'varchar'), { [Op.iLike]: like }),
+        { '$user.first_name$': { [Op.iLike]: like } },
+        { '$user.last_name$': { [Op.iLike]: like } },
+        { '$user.email$': { [Op.iLike]: like } },
+      ];
+      if (phoneDigits.length >= 3) {
+        or.push({ '$user.phone$': { [Op.iLike]: `%${phoneDigits}%` } });
+      }
+      (where as Record<symbol | string, unknown>)[Op.or] = or;
+    }
+
+    return this.appModel.findAll({
+      where,
+      include: [{ model: User, required: false }],
+      order: [['created_at', 'DESC']],
+      subQuery: false,
+    });
+  }
+
+  /**
+   * Returns a short-lived signed URL to the applicant's loan agreement PDF so
+   * the status portal can display it before (and after) signing.
+   *
+   * The `applications` table has no agreement columns, so the executed state is
+   * derived from the `loan_agreements` row and the PDF is generated on demand
+   * (review copy while awaiting signature, executed copy once signed) rather
+   * than persisted behind a stored file key.
+   */
+  async getAgreement(application_id: string) {
+    const application = await this.appModel.findByPk(application_id, {
+      include: [User],
+    });
+    if (!application) {
+      throw new NotFoundException('Loan application not found');
+    }
+
+    const agreementRow = await this.agreementModel.findOne({
+      where: { applicationId: application.id },
+      order: [['signed_at', 'DESC']],
+    });
+    const signed = !!agreementRow?.signedAt;
+    const signedAt = agreementRow?.signedAt ?? null;
+    const signedName = signed
+      ? `${application.user?.firstName ?? ''} ${application.user?.lastName ?? ''}`.trim()
+      : null;
+
+    try {
+      const key = await this.agreementService.generateAndStore(application, {
+        signed,
+        signedName,
+        signedAt,
+      });
+      // 10 minutes is plenty for the applicant to read and sign.
+      const url = await this.uploadService.getSignedUrl(key, 60 * 10);
+      return {
+        url,
+        generated_at: new Date(),
+        signed,
+        signed_at: signedAt,
+        signed_name: signedName,
+      };
+    } catch (err) {
+      this.logger.error(
+        'Failed to generate loan agreement PDF',
+        err instanceof Error ? err.stack : String(err),
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Records an e-signature for the loan agreement, advances the lifecycle to
+   * the verification-deposit step, and emails the borrower an executed PDF copy
+   * (filename branded with the project name). Returns the updated application
+   * plus the signature metadata so the caller can surface it to the portal.
+   */
+  async esign(
+    id: string,
+    ip: string,
+    fullName?: string,
+  ): Promise<{ application: Application; signedAt: Date; signedName: string }> {
+    const app = await this.appModel.findByPk(id, { include: [User] });
+    if (!app) throw new NotFoundException('Application not found.');
     if (app.status !== ApplicationStatus.SIGN_LOAN_AGREEMENT) {
       throw new BadRequestException(
         'Application is not awaiting an e-signature.',
       );
     }
+
+    const signedAt = new Date();
+    const borrowerName =
+      `${app.user?.firstName ?? ''} ${app.user?.lastName ?? ''}`.trim();
+    const signedName = fullName?.trim() || borrowerName || 'Borrower';
+
     const hash = createHash('sha256')
       .update(
-        `${app.id}:${app.requestedAmount}:${LOAN.apr}:${app.loanTermMonths}`,
+        `${app.id}:${app.requestedAmount}:${LOAN.apr}:${app.loanTermMonths}:${signedName}`,
       )
       .digest('hex');
     await this.agreementModel.create({
       applicationId: app.id,
       documentHash: hash,
-      signedAt: new Date(),
+      signedAt,
       signedIp: ip,
     } as Partial<LoanAgreement>);
-    return this.updateStatus(id, ApplicationStatus.VERIFICATION_DEPOSIT);
+
+    const updatedApplication = await this.updateStatus(
+      id,
+      ApplicationStatus.VERIFICATION_DEPOSIT,
+    );
+
+    // Render the executed copy and email it to the borrower. Best-effort: a
+    // storage or mail hiccup must never undo a completed signature.
+    try {
+      const pdf = await this.agreementService.renderSignedPdf(app, {
+        signedName,
+        signedAt,
+      });
+      if (app.user?.email) {
+        await this.email.sendSignedAgreementEmail({
+          applicationId: app.id,
+          firstName: app.user.firstName,
+          email: app.user.email,
+          loanAmount: Number(app.requestedAmount),
+          signedName,
+          signedAt,
+          pdf,
+        });
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send signed agreement email',
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+
+    return { application: updatedApplication, signedAt, signedName };
   }
 }

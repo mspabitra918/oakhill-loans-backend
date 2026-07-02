@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { UnderwritingService } from './underwriting.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -22,6 +30,17 @@ export class UnderwritingController {
   @Get('queues')
   queues() {
     return this.underwriting.getQueues();
+  }
+
+  // Flat, searchable application list for the admin table. Declared before the
+  // `:id` route so "search" isn't captured as an application id.
+  @Get('search')
+  search(
+    @Query('q') q?: string,
+    @Query('status') status?: string,
+    @Query('date') date?: string,
+  ) {
+    return this.underwriting.searchApplications({ q, status, date });
   }
 
   @Get(':id')

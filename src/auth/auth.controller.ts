@@ -42,12 +42,12 @@ export class AuthController {
   }
 
   @Post('send-otp')
-  @ApiOperation({ summary: 'Send OTP to phone number' })
+  @ApiOperation({ summary: 'Send OTP to email' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid phone number' })
+  @ApiResponse({ status: 400, description: 'Invalid email' })
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     try {
-      return await this.authService.sendOtp(sendOtpDto.phone);
+      return await this.authService.sendOtp(sendOtpDto.email);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const stack = error instanceof Error ? error.stack : undefined;
@@ -62,13 +62,13 @@ export class AuthController {
   async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
     try {
       return await this.authService.verifyOtp(
-        verifyOtpDto.phone,
+        verifyOtpDto.email,
         verifyOtpDto.otp,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Failed to verify OTP for ${verifyOtpDto.phone}: ${message}`,
+        `Failed to verify OTP for ${verifyOtpDto.email}: ${message}`,
       );
 
       throw error;

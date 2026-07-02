@@ -7,6 +7,8 @@ import { UnderwritingController } from './underwriting.controller';
 import { ApplicationsModule } from '../applications/applications.module';
 import { BankDetailsModule } from '../bank-details/bank-details.module';
 import { UsersModule } from '../users/users.module';
+import { AgreementService } from 'src/applications/agreement.service';
+import { UploadService } from 'src/upload/upload.service';
 
 @Module({
   imports: [
@@ -16,6 +18,6 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [UnderwritingController],
-  providers: [UnderwritingService],
+  providers: [UnderwritingService, AgreementService, UploadService],
 })
 export class UnderwritingModule {}

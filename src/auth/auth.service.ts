@@ -11,6 +11,7 @@ import { Role } from '../common/constants';
 import { toE164US } from '../common/phone';
 import { LoginDto } from './dto/login.dto';
 import { Twilio } from 'twilio';
+import { EmailService } from 'src/notifications/email.service';
 
 interface OtpEntry {
   otp: string;
@@ -28,6 +29,7 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly admins: AdminService,
     private readonly configService: ConfigService,
+    private readonly email: EmailService,
   ) {
     this.twilioClient = new Twilio(
       this.configService.get<string>('TWILIO_ACCOUNT_SID'),
@@ -80,12 +82,102 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  async sendOtp(
+    email: string,
+  ): Promise<{ success: boolean; message: string; otp?: string }> {
+    // const twilioPhone = toE164US(phone);
+
+    const user = await this.users.findByEmail(email);
+
+    if (!user) {
+      throw new UnauthorizedException('No account found with this email.');
+    }
+
+    const otp = this.generateOtp();
+
+    const expiresAt = new Date(
+      Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
+
+    this.otpStore.set(email, {
+      otp,
+      expiresAt,
+    });
+
+    try {
+      // await this.twilioClient.messages.create({
+      //   body: `Your OTP is ${otp}. It is valid for ${this.OTP_EXPIRY_MINUTES} minutes.`,
+      //   from: this.configService.get<string>('TWILIO_PHONE_NUMBER'),
+      //   to: twilioPhone, // normalized E.164, e.g. +14155550182
+      // });
+
+      await this.email.sendOtpEmail(email, otp, this.OTP_EXPIRY_MINUTES);
+
+      return {
+        success: true,
+        message: 'OTP sent successfully',
+      };
+    } catch (error) {
+      console.error('Twilio Error:', error);
+
+      throw new Error('Failed to send OTP');
+    }
+  }
+
+  // Verify OTP and login/register user
+  async verifyOtp(email: string, otp: string) {
+    const otpEntry = this.otpStore.get(email);
+
+    if (!otpEntry) {
+      throw new BadRequestException('OTP not found. Please request a new OTP.');
+    }
+
+    if (new Date() > otpEntry.expiresAt) {
+      this.otpStore.delete(email);
+      throw new BadRequestException(
+        'OTP has expired. Please request a new OTP.',
+      );
+    }
+
+    if (otpEntry.otp !== otp) {
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    this.otpStore.delete(email);
+
+    const user = await this.users.findByEmail(email);
+
+    if (!user) {
+      throw new UnauthorizedException('No account found with this email.');
+    }
+
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      role: Role.CUSTOMER,
+    };
+
+    return {
+      access_token: this.jwt.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.firstName} ${user.lastName ?? ''}`.trim(),
+        phone: user.phone,
+      },
+    };
+  }
+
   // async sendOtp(
   //   phone: string,
   // ): Promise<{ success: boolean; message: string; otp?: string }> {
+  //   // Don't normalize the phone
+  //   console.log('Request Phone:', phone);
   //   const twilioPhone = toE164US(phone);
 
   //   const user = await this.users.findByPhone(twilioPhone);
+
+  //   console.log('User:', user);
 
   //   if (!user) {
   //     throw new UnauthorizedException(
@@ -104,36 +196,31 @@ export class AuthService {
   //     expiresAt,
   //   });
 
-  //   try {
-  //     await this.twilioClient.messages.create({
-  //       body: `Your OTP is ${otp}. It is valid for ${this.OTP_EXPIRY_MINUTES} minutes.`,
-  //       from: this.configService.get<string>('TWILIO_PHONE_NUMBER'),
-  //       to: twilioPhone, // normalized E.164, e.g. +14155550182
-  //     });
+  //   console.log('===========================');
+  //   console.log(`Phone: ${phone}`);
+  //   console.log(`OTP: ${otp}`);
+  //   console.log('===========================');
 
-  //     return {
-  //       success: true,
-  //       message: 'OTP sent successfully',
-  //     };
-  //   } catch (error) {
-  //     console.error('Twilio Error:', error);
-
-  //     throw new Error('Failed to send OTP');
-  //   }
+  //   return {
+  //     success: true,
+  //     message: 'OTP generated successfully',
+  //     otp, // Remove this in production
+  //   };
   // }
 
-  // // Verify OTP and login/register user
   // async verifyOtp(phone: string, otp: string) {
-  //   const normalizedPhone = toE164US(phone);
+  //   const twilioPhone = toE164US(phone);
+  //   const otpEntry = this.otpStore.get(twilioPhone);
 
-  //   const otpEntry = this.otpStore.get(normalizedPhone);
+  //   console.log('SET KEY:', twilioPhone);
+  //   console.log(this.otpStore);
 
   //   if (!otpEntry) {
   //     throw new BadRequestException('OTP not found. Please request a new OTP.');
   //   }
 
   //   if (new Date() > otpEntry.expiresAt) {
-  //     this.otpStore.delete(normalizedPhone);
+  //     this.otpStore.delete(twilioPhone);
   //     throw new BadRequestException(
   //       'OTP has expired. Please request a new OTP.',
   //     );
@@ -143,9 +230,9 @@ export class AuthService {
   //     throw new BadRequestException('Invalid OTP');
   //   }
 
-  //   this.otpStore.delete(normalizedPhone);
+  //   this.otpStore.delete(twilioPhone);
 
-  //   const user = await this.users.findByPhone(normalizedPhone);
+  //   const user = await this.users.findByPhone(twilioPhone);
 
   //   if (!user) {
   //     throw new UnauthorizedException(
@@ -157,6 +244,7 @@ export class AuthService {
   //     email: user.email,
   //     sub: user.id,
   //     role: Role.CUSTOMER,
+  //     phone: user.phone, // Include phone in the payload
   //   };
 
   //   return {
@@ -169,94 +257,4 @@ export class AuthService {
   //     },
   //   };
   // }
-
-  async sendOtp(
-    phone: string,
-  ): Promise<{ success: boolean; message: string; otp?: string }> {
-    // Don't normalize the phone
-    console.log('Request Phone:', phone);
-    const twilioPhone = toE164US(phone);
-
-    const user = await this.users.findByPhone(twilioPhone);
-
-    console.log('User:', user);
-
-    if (!user) {
-      throw new UnauthorizedException(
-        'No account found with this phone number.',
-      );
-    }
-
-    const otp = this.generateOtp();
-
-    const expiresAt = new Date(
-      Date.now() + this.OTP_EXPIRY_MINUTES * 60 * 1000,
-    );
-
-    this.otpStore.set(twilioPhone, {
-      otp,
-      expiresAt,
-    });
-
-    console.log('===========================');
-    console.log(`Phone: ${phone}`);
-    console.log(`OTP: ${otp}`);
-    console.log('===========================');
-
-    return {
-      success: true,
-      message: 'OTP generated successfully',
-      otp, // Remove this in production
-    };
-  }
-
-  async verifyOtp(phone: string, otp: string) {
-    const twilioPhone = toE164US(phone);
-    const otpEntry = this.otpStore.get(twilioPhone);
-
-    console.log('SET KEY:', twilioPhone);
-    console.log(this.otpStore);
-
-    if (!otpEntry) {
-      throw new BadRequestException('OTP not found. Please request a new OTP.');
-    }
-
-    if (new Date() > otpEntry.expiresAt) {
-      this.otpStore.delete(twilioPhone);
-      throw new BadRequestException(
-        'OTP has expired. Please request a new OTP.',
-      );
-    }
-
-    if (otpEntry.otp !== otp) {
-      throw new BadRequestException('Invalid OTP');
-    }
-
-    this.otpStore.delete(twilioPhone);
-
-    const user = await this.users.findByPhone(twilioPhone);
-
-    if (!user) {
-      throw new UnauthorizedException(
-        'No account found with this phone number.',
-      );
-    }
-
-    const payload = {
-      email: user.email,
-      sub: user.id,
-      role: Role.CUSTOMER,
-      phone: user.phone, // Include phone in the payload
-    };
-
-    return {
-      access_token: this.jwt.sign(payload),
-      user: {
-        id: user.id,
-        email: user.email,
-        name: `${user.firstName} ${user.lastName ?? ''}`.trim(),
-        phone: user.phone,
-      },
-    };
-  }
 }

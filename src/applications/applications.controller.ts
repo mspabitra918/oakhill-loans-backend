@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Ip, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  InternalServerErrorException,
+  Ip,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
 // import { CreateApplicationDto } from './dto/create-application.dto';
 import { CreateLoanApplicationDto } from './dto/create-loan-application.dto';
@@ -73,9 +81,34 @@ export class ApplicationsController {
   }
 
   @Post(':id/esign')
-  async esign(@Param('id') id: string, @Ip() ip: string) {
-    const app = await this.applicationsService.esign(id, ip);
-    return this.toStatusView(app);
+  async esign(
+    @Param('id') id: string,
+    @Ip() ip: string,
+    @Body() body: { fullName?: string } = {},
+  ) {
+    const { application, signedAt, signedName } =
+      await this.applicationsService.esign(id, ip, body?.fullName);
+    return {
+      ...this.toStatusView(application),
+      signed_at: signedAt.toISOString(),
+      signed_name: signedName,
+    };
+  }
+
+  // Public — the applicant fetches a short-lived signed URL to view their
+  // generated loan agreement from the status portal.
+  @Get('applications/:application_id/agreement')
+  async getAgreement(@Param('application_id') application_id: string) {
+    try {
+      const agreement =
+        await this.applicationsService.getAgreement(application_id);
+      return { agreement };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error fetching loan agreement',
+        error instanceof Error ? error.message : undefined,
+      );
+    }
   }
 
   private toStatusView(app: {
@@ -86,6 +119,13 @@ export class ApplicationsController {
     monthlyPayment: number;
     calculatedDti: number;
     statusReason?: string;
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+    };
   }) {
     const stage = STATUS_TO_STAGE[app.status] ?? {
       index: -1,
@@ -101,6 +141,7 @@ export class ApplicationsController {
       loanTermMonths: app.loanTermMonths,
       monthlyPayment: Number(app.monthlyPayment),
       calculatedDti: Number(app.calculatedDti),
+      user: app.user,
     };
   }
 }

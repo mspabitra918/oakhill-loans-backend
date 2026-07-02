@@ -115,6 +115,21 @@ export class EmailService {
     }
   }
 
+  async sendOtpEmail(
+    email: string,
+    otp: string,
+    expiryMinutes: number,
+  ): Promise<void> {
+    const html = `
+      <p>Your OTP is <strong>${otp}</strong>. It is valid for ${expiryMinutes} minutes.</p>
+    `;
+    await this.sendEmail({
+      to: email,
+      subject: 'Your OTP',
+      html,
+    });
+  }
+
   // ── App-facing notifications ─────────────────────────────────
   // These are the methods the rest of the app calls (applications,
   // gatekeeper, underwriting). Each only has the recipient's email and first
@@ -149,6 +164,47 @@ export class EmailService {
     await this.sendEmail({
       to: email,
       subject: `We received your application | ${BRAND.name}`,
+      html,
+    });
+  }
+
+  async loanAgreementSigned(
+    email: string,
+    firstName: string,
+    id: string,
+  ): Promise<void> {
+    const html = this.simpleLayout({
+      heading: 'Loan Agreement Signed',
+      color: '#16a34a',
+      icon: '&#9997;', // ✍️
+      bodyHtml: `
+      <p style="color: #374151; font-size: 16px;">Hi ${firstName},</p>
+
+      <p style="color: #374151; font-size: 16px;">
+        Thank you for electronically signing your loan agreement.
+        We have successfully received your signature.
+      </p>
+
+      <p style="color: #374151; font-size: 16px;">
+        Your application has now moved to the
+        <strong>Verification Deposit</strong> stage. Our team is completing the
+        remaining verification steps, and we'll notify you as soon as there is
+        an update.
+      </p>
+
+      <p style="color: #374151; font-size: 16px;">
+        Thank you for choosing ${BRAND.name}.
+      </p>
+    `,
+      cta: {
+        label: 'View Application Status',
+        url: `${process.env.FRONTEND_URL ?? ''}/dashboard?id=${id}`,
+      },
+    });
+
+    await this.sendEmail({
+      to: email,
+      subject: `Loan Agreement Signed Successfully | ${BRAND.name}`,
       html,
     });
   }
@@ -576,7 +632,7 @@ export class EmailService {
         </div>`
             : status === ApplicationStatus.SIGN_LOAN_AGREEMENT
               ? `<div style="text-align: center; margin: 25px 0;">
-          <a href="${process.env.FRONTEND_URL}/status?ref=${applicationId}&last_name=${encodeURIComponent(last_name ?? '')}" style="background: #1a56db; color: #ffffff; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: bold; display: inline-block;">Review &amp; Sign Agreement</a>
+          <a href="${process.env.FRONTEND_URL}/dashboard?id=${id}&last_name=${encodeURIComponent(last_name ?? '')}" style="background: #1a56db; color: #ffffff; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: bold; display: inline-block;">Review &amp; Sign Agreement</a>
         </div>`
               : ''
         }
