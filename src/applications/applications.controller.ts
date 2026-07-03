@@ -1,17 +1,23 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   InternalServerErrorException,
   Ip,
   Param,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
 // import { CreateApplicationDto } from './dto/create-application.dto';
 import { CreateLoanApplicationDto } from './dto/create-loan-application.dto';
 import { CreateExistingUserLoanApplicationDto } from './dto/create-existing-user-loan-application.dto';
 import { STATUS_TO_STAGE } from '../common/lifecycle';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/decorators/current-user.decorator';
+import { Role } from '../common/constants';
 
 @Controller('applications')
 export class ApplicationsController {
@@ -56,8 +62,14 @@ export class ApplicationsController {
   // Drives the customer dashboard list: every application belonging to a user,
   // most recent first. We only have the user id (from the JWT/session) here.
   @Get('user/applications/:phone')
-  async findAllApplicationByUser(@Param('phone') phone: string) {
+  @UseGuards(JwtAuthGuard)
+  async findAllApplicationByUser(
+    @Param('phone') phone: string,
+    @CurrentUser() user: AuthUser,
+  ) {
     const apps = await this.applicationsService.findAllApplicationByUser(phone);
+    // A customer may only list their own applications; staff may list anyone's.
+    if (apps.length > 0) this.assertCanAccess(user, apps[0].userId);
     return apps.map((app) => ({
       ...this.toStatusView(app),
       loanPurpose: app.loanPurpose,
@@ -68,16 +80,37 @@ export class ApplicationsController {
   // Drives the customer dashboard after OTP login, where we only have the user
   // id (from the JWT/session) rather than a specific application id.
   @Get('user/:phone')
-  async findLatestByUser(@Param('phone') phone: string) {
+  @UseGuards(JwtAuthGuard)
+  async findLatestByUser(
+    @Param('phone') phone: string,
+    @CurrentUser() user: AuthUser,
+  ) {
     const app = await this.applicationsService.findLatestByPhone(phone);
+    this.assertCanAccess(user, app.userId);
     return this.toStatusView(app);
   }
 
-  // Drives the customer dashboard lifecycle tracker.
+  // Drives the customer dashboard lifecycle tracker. Requires a valid session,
+  // and a customer may only view an application they own (prevents IDOR via a
+  // guessed/leaked `?id=` in the dashboard URL).
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  @UseGuards(JwtAuthGuard)
+  async findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     const app = await this.applicationsService.findById(id);
+    this.assertCanAccess(user, app.userId);
     return this.toStatusView(app);
+  }
+
+  // Ownership gate shared by the customer-facing read endpoints. Staff
+  // (admin/underwriter) may access any application; a customer may only access
+  // applications whose owner id matches their token subject.
+  private assertCanAccess(user: AuthUser, ownerId: string): void {
+    if ((user.role as Role) !== Role.CUSTOMER) return;
+    if (ownerId !== user.sub) {
+      throw new ForbiddenException(
+        'You do not have access to this application.',
+      );
+    }
   }
 
   @Post(':id/esign')

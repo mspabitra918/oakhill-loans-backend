@@ -52,6 +52,8 @@ export class AuthController {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.warn(`Failed to send OTP: ${message}`, stack);
+
+      throw error;
     }
   }
 
