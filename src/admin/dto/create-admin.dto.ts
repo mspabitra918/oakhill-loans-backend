@@ -1,7 +1,7 @@
 // users/dto/create-user.dto.ts
 
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
-import { Role } from 'src/common/constants';
+import { Role } from '../../common/constants';
 
 export class CreateAdminDto {
   @IsString()

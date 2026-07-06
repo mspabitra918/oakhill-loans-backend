@@ -18,10 +18,10 @@ import { ApplicationStatus, HousingStatus, LOAN } from '../common/constants';
 import { calculateDti, monthlyPayment } from '../common/finance';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../notifications/email.service';
-import { CreateBankDetailDto } from 'src/bank-details/dto/create-bank-detail.dto';
-import { CreateUserDto } from 'src/users/dto/create-user.dto';
+import { CreateBankDetailDto } from '../bank-details/dto/create-bank-detail.dto';
+import { CreateUserDto } from '../users/dto/create-user.dto';
 import { BankDetailsService } from '../bank-details/bank-details.service';
-import { TrackingService } from 'src/tracking/tracking.service';
+import { TrackingService } from '../tracking/tracking.service';
 import { AgreementService } from './agreement.service';
 import { UploadService } from '../upload/upload.service';
 

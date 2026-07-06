@@ -7,7 +7,7 @@ import { AgreementService } from './agreement.service';
 import { ApplicationsController } from './applications.controller';
 import { UsersModule } from '../users/users.module';
 import { BankDetailsModule } from '../bank-details/bank-details.module';
-import { TrackingModule } from 'src/tracking/tracking.module';
+import { TrackingModule } from '../tracking/tracking.module';
 import { UploadService } from '../upload/upload.service';
 
 @Module({

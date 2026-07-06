@@ -11,7 +11,7 @@ import { Role } from '../common/constants';
 import { toE164US } from '../common/phone';
 import { LoginDto } from './dto/login.dto';
 import { Twilio } from 'twilio';
-import { EmailService } from 'src/notifications/email.service';
+import { EmailService } from '../notifications/email.service';
 
 interface OtpEntry {
   otp: string;

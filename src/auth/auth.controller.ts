@@ -7,8 +7,8 @@ import type { AuthUser } from './decorators/current-user.decorator';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
-import { CreateAdminDto } from 'src/admin/dto/create-admin.dto';
-import { AdminService } from 'src/admin/admin.service';
+import { CreateAdminDto } from '../admin/dto/create-admin.dto';
+import { AdminService } from '../admin/admin.service';
 
 @Controller('auth')
 export class AuthController {

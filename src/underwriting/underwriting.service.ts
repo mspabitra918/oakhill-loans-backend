@@ -15,7 +15,7 @@ import { EmailService } from '../notifications/email.service';
 import { SmsService } from '../notifications/sms.service';
 import { ApplicationStatus, RELEASABLE_STATUSES } from '../common/constants';
 import { ReleaseFundsDto } from './dto/underwriting.dto';
-import { AgreementService } from 'src/applications/agreement.service';
+import { AgreementService } from '../applications/agreement.service';
 
 // Statuses surfaced as underwriter work queues.
 const QUEUE_STATUSES = [
