@@ -136,7 +136,7 @@ export class EmailService {
   // name to work with, so they send a self-contained, branded message.
 
   // private get portalUrl(): string {
-  //   return `${process.env.FRONTEND_URL ?? ''}/dashboard/id=${id}`;
+  //   return `${process.env.FRONTEND_URL ?? ''}/dashboard/${id}`;
   // }
 
   // Confirmation right after an application is submitted.
@@ -158,7 +158,7 @@ export class EmailService {
         </p>`,
       cta: {
         label: 'Check Your Application Status',
-        url: `${process.env.FRONTEND_URL ?? ''}/dashboard?id=${id}`,
+        url: `${process.env.FRONTEND_URL ?? ''}/dashboard/${id}`,
       },
     });
     await this.sendEmail({
@@ -197,7 +197,7 @@ export class EmailService {
     `,
       cta: {
         label: 'View Application Status',
-        url: `${process.env.FRONTEND_URL ?? ''}/dashboard?id=${id}`,
+        url: `${process.env.FRONTEND_URL ?? ''}/dashboard/${id}`,
       },
     });
 
@@ -252,7 +252,7 @@ export class EmailService {
         </p>`,
       cta: {
         label: 'Update Bank Details',
-        url: `${process.env.FRONTEND_URL ?? ''}/dashboard?id=${id}&bankModalOpen=open`,
+        url: `${process.env.FRONTEND_URL ?? ''}/dashboard/${id}?bankModalOpen=open`,
       },
     });
     await this.sendEmail({
@@ -281,7 +281,7 @@ export class EmailService {
         </p>`,
       cta: {
         label: 'View Next Steps',
-        url: `${process.env.FRONTEND_URL ?? ''}/dashboard?id=${id}`,
+        url: `${process.env.FRONTEND_URL ?? ''}/dashboard/${id}`,
       },
     });
     await this.sendEmail({
@@ -308,7 +308,7 @@ export class EmailService {
         </p>`,
       cta: {
         label: 'View Application Status',
-        url: `${process.env.FRONTEND_URL ?? ''}/dashboard?id=${id}`,
+        url: `${process.env.FRONTEND_URL ?? ''}/dashboard/${id}`,
       },
     });
     await this.sendEmail({
@@ -648,7 +648,7 @@ export class EmailService {
         </div>`
             : status === ApplicationStatus.SIGN_LOAN_AGREEMENT
               ? `<div style="text-align: center; margin: 25px 0;">
-          <a href="${process.env.FRONTEND_URL}/dashboard?id=${id}&last_name=${encodeURIComponent(last_name ?? '')}" style="background: #1a56db; color: #ffffff; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: bold; display: inline-block;">Review &amp; Sign Agreement</a>
+          <a href="${process.env.FRONTEND_URL}/dashboard/${id}?last_name=${encodeURIComponent(last_name ?? '')}" style="background: #1a56db; color: #ffffff; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: bold; display: inline-block;">Review &amp; Sign Agreement</a>
         </div>`
               : ''
         }
