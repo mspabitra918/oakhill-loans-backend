@@ -23,7 +23,7 @@ import { CreateUserDto } from 'src/users/dto/create-user.dto';
 import { BankDetailsService } from '../bank-details/bank-details.service';
 import { TrackingService } from 'src/tracking/tracking.service';
 import { AgreementService } from './agreement.service';
-import { UploadService } from 'src/upload/upload.service';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class ApplicationsService {

@@ -8,7 +8,7 @@ import { ApplicationsController } from './applications.controller';
 import { UsersModule } from '../users/users.module';
 import { BankDetailsModule } from '../bank-details/bank-details.module';
 import { TrackingModule } from 'src/tracking/tracking.module';
-import { UploadService } from 'src/upload/upload.service';
+import { UploadService } from '../upload/upload.service';
 
 @Module({
   imports: [

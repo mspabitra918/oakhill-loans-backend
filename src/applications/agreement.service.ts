@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Application } from './models/application.model';
-import { UploadService } from 'src/upload/upload.service';
+import { UploadService } from '../upload/upload.service';
 // Fixed APR from the product brief (see frontend src/lib/constants.ts LOAN.apr).
 const APR_PERCENT = 10;
 
