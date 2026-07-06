@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 // Statically import the Postgres driver. Sequelize loads it via a dynamic
 // require() that bundlers/serverless tracers (Vercel) can't follow, so we
 // import it here and pass it through `dialectModule` below.
-// import * as pg from 'pg';
+import * as pg from 'pg';
 // import { User } from '../src/users/models/user.model';
 // import { LoanApplication } from '../src/applications/models/application.model';
 // import { BankConnection } from '../src/bank-connections/models/bank-connection.model';
@@ -48,7 +48,7 @@ export const buildSequelizeOptions = (
 
   const common: SequelizeModuleOptions = {
     dialect: 'postgres',
-    // dialectModule: pg,
+    dialectModule: pg,
     // models: [
     //   User,
     //   LoanApplication,
