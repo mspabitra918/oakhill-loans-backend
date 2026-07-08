@@ -360,7 +360,7 @@ export class EmailService {
     return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background: #FFFFFF; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; border: 1px solid #e5e7eb;">
-        <img src="${BRAND.logoUrl}" alt="${BRAND.name}" style="height: 48px; width: 200px; display: block; margin: 0 auto 8px; color: #1a56db; font-size: 20px; font-weight: bold; line-height: 48px;" />
+        <img src="https://www.oakhillloans.com/blue-logo.png" alt="${BRAND.name}" style="height: 48px; width: 200px; display: block; margin: 0 auto 8px; color: #1a56db; font-size: 20px; font-weight: bold; line-height: 48px;" />
       </div>
       <div style="border: 1px solid #e5e7eb; border-top: none; padding: 30px; border-radius: 0 0 8px 8px;">
         <div style="text-align: center; margin-bottom: 20px;">
