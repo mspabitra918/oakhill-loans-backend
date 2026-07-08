@@ -10,7 +10,7 @@ export const BRAND = {
   domain: 'oakhillloans.com',
   website: 'https://www.oakhillloans.com',
   websiteLabel: 'www.oakhillloans.com',
-  logoUrl: 'https://oakhillloans.com/logo.png',
+  logoUrl: 'https://oakhillloans.com/emaillogo.png',
   supportEmail: 'support@oakhillloans.com',
   // Sender shown in the "From" line of outgoing email.
   fromName: 'Oakhill Loans',
