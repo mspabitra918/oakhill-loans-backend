@@ -15,8 +15,8 @@ export const BRAND = {
   // Sender shown in the "From" line of outgoing email.
   fromName: 'Oakhill Loans',
   // Display + dialable forms of the support phone number.
-  phone: '888-392-2321',
-  phoneTel: '+18883922321',
+  phone: '(747) 330-5650',
+  phoneTel: '+17473305650',
 } as const;
 
 export const LOAN = {
