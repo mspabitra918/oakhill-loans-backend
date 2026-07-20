@@ -7,6 +7,7 @@ import {
   Ip,
   Param,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../common/constants';
+import { getClientIp } from '@/utils/get-client-ip';
 
 @Controller('applications')
 export class ApplicationsController {
@@ -31,9 +33,11 @@ export class ApplicationsController {
 
   @Post('/loan-applications')
   async createLoanApplications(
+    @Req() req: any,
     @Body() body: CreateLoanApplicationDto,
-    @Ip() ip: string,
+    // @Ip() ip: string,
   ) {
+    const ip = getClientIp(req);
     const app = await this.applicationsService.createLoanApplications(
       body.user,
       body.application,
