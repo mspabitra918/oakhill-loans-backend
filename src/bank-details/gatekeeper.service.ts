@@ -1,6 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { BannedRoutingNumber } from './models/banned-routing-number.model';
 import { BankDetail } from './models/bank-detail.model';
 import { ApplicationsService } from '../applications/applications.service';
 import { UsersService } from '../users/users.service';
@@ -26,8 +25,6 @@ export class GatekeeperService {
   private readonly logger = new Logger(GatekeeperService.name);
 
   constructor(
-    @InjectModel(BannedRoutingNumber)
-    private readonly bannedModel: typeof BannedRoutingNumber,
     @InjectModel(BankDetail)
     private readonly bankModel: typeof BankDetail,
     @Inject(forwardRef(() => ApplicationsService))
@@ -57,25 +54,10 @@ export class GatekeeperService {
       return { status: ApplicationStatus.DECLINED, reason, dti };
     }
 
-    // 2) ROUTING-NUMBER CHECK — banned prepaid / BaaS neobanks.
-    const bank = await this.bankModel.findByPk(bankDetailId);
-    const banned = bank
-      ? await this.bannedModel.findByPk(bank.routingNumber)
-      : null;
-    if (banned) {
-      const reason = `Routing number ${bank!.routingNumber} (${banned.bankName}) is not eligible: ${banned.reason}.`;
-      await this.applications.updateStatus(
-        applicationId,
-        ApplicationStatus.BANK_REJECTED,
-        reason,
-      );
-      // Correction Email asks for a new, eligible bank account.
-      await this.email.bankCorrection(user.email, user.firstName, app?.id);
-      return { status: ApplicationStatus.BANK_REJECTED, reason, dti };
-    }
-
-    // Routing is safe — simulate the bank verification API success so the
+    // 2) BANK CHECK — every routing number and bank is accepted, so there is no
+    // eligibility gate here. Simulate the bank verification API success so the
     // admin dual-view has an "API-verified" signal. (Real provider: TODO.)
+    const bank = await this.bankModel.findByPk(bankDetailId);
     if (bank) {
       bank.apiVerified = true;
       await bank.save();

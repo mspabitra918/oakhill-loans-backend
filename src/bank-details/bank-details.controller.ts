@@ -27,8 +27,9 @@ export class BankDetailsController {
     return this.bankDetailsService.update(applicationId, dto);
   }
 
+  // Format-only check (9 digits). Every bank and routing number is accepted.
   @Post('check-routing')
-  async checkRouting(@Body() dto: CheckBankRoutingDto) {
+  checkRouting(@Body() dto: CheckBankRoutingDto) {
     return this.bankDetailsService.checkBankRoutingNumber(dto);
   }
 }

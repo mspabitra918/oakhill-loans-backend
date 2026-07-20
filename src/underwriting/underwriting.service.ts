@@ -16,6 +16,7 @@ import { SmsService } from '../notifications/sms.service';
 import { ApplicationStatus, RELEASABLE_STATUSES } from '../common/constants';
 import { ReleaseFundsDto } from './dto/underwriting.dto';
 import { AgreementService } from '../applications/agreement.service';
+import { pacificDayRange } from '../common/timezone';
 
 // Statuses surfaced as underwriter work queues.
 const QUEUE_STATUSES = [
@@ -88,14 +89,15 @@ export class UnderwritingService {
     status?: string;
     date?: string;
   }) {
+    // The admin portal displays Pacific times, so a date picked in its filter
+    // means a Pacific calendar day — not one in the API server's local zone.
     let dateFrom: Date | undefined;
     let dateTo: Date | undefined;
     if (params.date) {
-      const from = new Date(`${params.date}T00:00:00.000`);
-      const to = new Date(`${params.date}T23:59:59.999`);
-      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
-        dateFrom = from;
-        dateTo = to;
+      const range = pacificDayRange(params.date);
+      if (range.dateFrom && range.dateTo) {
+        dateFrom = range.dateFrom;
+        dateTo = range.dateTo;
       }
     }
 

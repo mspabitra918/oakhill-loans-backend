@@ -18,7 +18,6 @@ import { EncryptionService } from '../common/crypto/encryption.service';
 import { ApplicationsService } from '../applications/applications.service';
 import { GatekeeperService, GatekeeperResult } from './gatekeeper.service';
 import { ApplicationStatus } from '../common/constants';
-import { BannedRoutingNumber } from './models/banned-routing-number.model';
 
 @Injectable()
 export class BankDetailsService {
@@ -30,8 +29,6 @@ export class BankDetailsService {
     private readonly gatekeeper: GatekeeperService,
     @Inject(forwardRef(() => ApplicationsService))
     private readonly applications: ApplicationsService,
-    @InjectModel(BannedRoutingNumber)
-    private readonly bannedModel: typeof BannedRoutingNumber,
   ) {}
 
   /**
@@ -133,21 +130,15 @@ export class BankDetailsService {
     return this.bankModel.findAll({ where: { applicationId } });
   }
 
-  async checkBankRoutingNumber(dto: CheckBankRoutingDto) {
-    const banned = await this.bannedModel.findOne({
-      where: {
-        routingNumber: dto.routingNumber,
-      },
-    });
-
-    if (banned) {
-      throw new BadRequestException(
-        'The routing number you entered has been restricted and cannot be used to submit a loan application. Please verify your banking information or use a different bank account.',
-      );
-    }
-
+  /**
+   * All banks and routing numbers are accepted — the only requirement is the
+   * 9-digit format, already enforced by CheckBankRoutingDto. Kept as an
+   * endpoint so the apply form's inline check keeps working.
+   */
+  checkBankRoutingNumber(dto: CheckBankRoutingDto) {
     return {
       success: true,
+      routingNumber: dto.routingNumber,
       message: 'Routing number is valid.',
     };
   }

@@ -36,7 +36,7 @@ export enum ApplicationStatus {
   BANK_VERIFICATION_PENDING = 'BANK_VERIFICATION_PENDING',
   PENDING_VERIFICATION = 'PENDING_VERIFICATION', // fast-track (safe + DTI < 45%)
   MANUAL_REVIEW = 'MANUAL_REVIEW', // underwriter queue
-  BANK_REJECTED = 'BANK_REJECTED', // banned routing -> correction email
+  BANK_REJECTED = 'BANK_REJECTED', // bank unusable -> correction email
   PHONE_VERIFICATION_PENDING = 'PHONE_VERIFICATION_PENDING',
   SIGN_LOAN_AGREEMENT = 'SIGN_LOAN_AGREEMENT',
   FUNDED = 'FUNDED', // terminal — set only by manual admin release
